@@ -1,0 +1,3 @@
+# packages
+
+cargo add <package>
