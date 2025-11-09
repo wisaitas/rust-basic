@@ -1,14 +1,26 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-use crate::schema::user::tbl_users;
+diesel::table! {
+    tbl_users (id) {
+        id -> Uuid,
+        first_name -> Varchar,
+        last_name -> Varchar,
+        email -> Varchar,
+        password -> Varchar,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        deleted_at -> Nullable<Timestamptz>,
+    }
+}
 
-#[derive(Debug, Queryable, Selectable, Serialize, Deserialize)]
+#[derive(Debug, Queryable, Selectable, Insertable, Serialize, Deserialize)]
 #[diesel(table_name = tbl_users)]
 #[diesel(check_for_backend(diesel::pg::Pg))]
 pub struct User {
-    pub id: i32,
+    pub id: Uuid,
     pub first_name: String,
     pub last_name: String,
     pub email: String,
@@ -17,15 +29,4 @@ pub struct User {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Debug, Insertable)]
-#[diesel(table_name = tbl_users)]
-pub struct NewUser {
-    pub first_name: String,
-    pub last_name: String,
-    pub email: String,
-    pub password: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
 }

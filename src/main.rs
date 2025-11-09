@@ -1,25 +1,19 @@
-use axum::{Router, routing::post};
-use rust_101::create_pool;
-use rust_101::usecase::auth::register::handler::register_handler;
+use rocket::{Build, Rocket, routes};
+use rust_basic::create_pool;
+use rust_basic::middleware::error_logger::ErrorLogger;
+use rust_basic::usecase::auth::register::handler::register_handler;
 
-#[tokio::main]
-async fn main() {
-    // Setup database connection pool
+#[rocket::launch]
+fn rocket() -> Rocket<Build> {
     let pool = create_pool();
 
-    // Setup routes
-    let app = Router::new()
-        .route("/api/auth/register", post(register_handler))
-        .with_state(pool);
-
-    // Start server
-    let listener =
-        tokio::net::TcpListener::bind(format!("0.0.0.0:{}", config::CONFIG.server.server_port))
-            .await
-            .unwrap();
-
-    println!("Server running on http://localhost:3000");
-    println!("Register endpoint: POST http://localhost:3000/api/auth/register");
-
-    axum::serve(listener, app).await.unwrap();
+    rocket::build()
+        .manage(pool)
+        .mount("/api/v1", routes![register_handler])
+        .attach(ErrorLogger) // เพิ่ม error logger middleware
+        .configure(
+            rocket::Config::figment()
+                .merge(("port", rust_basic::config::CONFIG.server.server_port))
+                .merge(("address", "0.0.0.0")),
+        )
 }

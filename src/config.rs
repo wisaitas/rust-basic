@@ -26,8 +26,6 @@ pub struct Config {
     pub redis: RedisConfig,
     #[serde(flatten)]
     pub jwt: JwtConfig,
-    #[serde(flatten)]
-    pub cloud_storage: CloudStorageConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]

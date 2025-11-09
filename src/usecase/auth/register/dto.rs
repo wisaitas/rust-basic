@@ -1,8 +1,9 @@
-use serde::{Deserialize, Serialize};
+use rocket::serde::Deserialize;
 use validator::Validate;
 
 #[derive(Debug, Deserialize, Validate)]
-pub struct RegisterRequest {
+#[serde(crate = "rocket::serde")]
+pub struct Request {
     #[validate(length(min = 1, message = "First name is required"))]
     pub first_name: String,
 
@@ -14,18 +15,7 @@ pub struct RegisterRequest {
 
     #[validate(length(min = 6, message = "Password must be at least 6 characters"))]
     pub password: String,
-}
 
-#[derive(Debug, Serialize)]
-pub struct RegisterResponse {
-    pub id: i32,
-    pub first_name: String,
-    pub last_name: String,
-    pub email: String,
-    pub message: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ErrorResponse {
-    pub error: String,
+    #[validate(must_match(other = "password", message = "Passwords do not match"))]
+    pub confirm_password: String,
 }

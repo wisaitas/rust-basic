@@ -1,20 +1,30 @@
-use axum::{
-    Json,
-    extract::State,
-    http::StatusCode,
-    response::{IntoResponse, Response},
-};
+use crate::ErrorResponse;
+use rocket::{Response, State, http::Status, post, response::Responder, serde::json::Json};
 use validator::Validate;
 
 use crate::DbPool;
 use crate::domain::repository::user::UserRepositoryImpl;
-use crate::usecase::auth::register::dto::{ErrorResponse, RegisterRequest};
-use crate::usecase::auth::register::service::RegisterService;
+use crate::usecase::auth::register::dto::Request as RegisterRequest;
+use crate::usecase::auth::register::service::{
+    RegisterResponse, RegisterService, RegisterServiceImpl,
+}; // เพิ่ม RegisterResponse
 
+// Custom Responder สำหรับ error handling
+pub struct ApiResponse<T>(Status, Json<T>);
+
+impl<'r, T: rocket::serde::Serialize> Responder<'r, 'static> for ApiResponse<T> {
+    fn respond_to(self, req: &'r rocket::Request<'_>) -> rocket::response::Result<'static> {
+        Response::build_from(self.1.respond_to(req)?)
+            .status(self.0)
+            .ok()
+    }
+}
+
+#[post("/auth/register", data = "<payload>")]
 pub async fn register_handler(
-    State(pool): State<DbPool>,
-    Json(payload): Json<RegisterRequest>,
-) -> Response {
+    pool: &State<DbPool>,
+    payload: Json<RegisterRequest>,
+) -> Result<ApiResponse<RegisterResponse>, ApiResponse<ErrorResponse>> {
     // Validate request
     if let Err(errors) = payload.validate() {
         let error_message = errors
@@ -30,42 +40,53 @@ pub async fn register_handler(
             .collect::<Vec<_>>()
             .join(", ");
 
-        return (
-            StatusCode::BAD_REQUEST,
+        // Log error (แต่ไม่ส่ง details ไปให้ client)
+        crate::log_error!(400, "Validation error", &error_message);
+
+        // ส่ง generic message ให้ client
+        return Err(ApiResponse(
+            Status::BadRequest,
             Json(ErrorResponse {
-                error: error_message,
+                error: "Invalid request data".to_string(),
             }),
-        )
-            .into_response();
+        ));
     }
 
     // Get connection from pool
     let conn = match pool.get() {
         Ok(conn) => conn,
         Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
+            // Log detailed error
+            crate::log_error!(500, "Database connection error", &format!("{}", e));
+
+            // ส่ง generic message ให้ client
+            return Err(ApiResponse(
+                Status::InternalServerError,
                 Json(ErrorResponse {
-                    error: format!("Database connection error: {}", e),
+                    error: "Internal server error".to_string(),
                 }),
-            )
-                .into_response();
+            ));
         }
     };
 
     // Create repository and service
     let user_repo = UserRepositoryImpl { conn };
-    let mut service = RegisterService::new(user_repo);
+    let mut service = RegisterServiceImpl::new(Box::new(user_repo));
 
     // Process registration
-    match service.register(payload) {
-        Ok(response) => (StatusCode::CREATED, Json(response)).into_response(),
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                error: e.to_string(),
-            }),
-        )
-            .into_response(),
+    match service.register(payload.into_inner()) {
+        Ok(response) => Ok(ApiResponse(Status::Created, Json(response))),
+        Err(e) => {
+            // Log detailed error
+            crate::log_error!(400, "Registration failed", &format!("{}", e));
+
+            // ส่ง generic message ให้ client
+            Err(ApiResponse(
+                Status::BadRequest,
+                Json(ErrorResponse {
+                    error: "Registration failed".to_string(),
+                }),
+            ))
+        }
     }
 }
